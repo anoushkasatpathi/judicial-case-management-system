@@ -1,0 +1,248 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  Judge
+  Advocate
+  Registrar
+  Admin
+  Public
+}
+
+enum CaseStatus {
+  Filed
+  Verification
+  Returned
+  Listed
+  Heard
+  Disposed
+}
+
+enum PartyRole {
+  Petitioner
+  Respondent
+}
+
+enum HearingStatus {
+  Scheduled
+  Completed
+  Adjourned
+  Cancelled
+}
+
+enum DocumentType {
+  Petition
+  Evidence
+  Order
+  Affidavit
+}
+
+enum VirusScanStatus {
+  Pending
+  Clean
+  Infected
+}
+
+enum PriorityFactorType {
+  Age
+  StatutoryUrgency
+  EmergencyFlag
+  VulnerabilityFlag
+}
+
+enum NotificationChannel {
+  Email
+  SMS
+  Push
+}
+
+model User {
+  id              String         @id @default(uuid()) @db.Uuid
+  name            String
+  email           String         @unique
+  password_hash   String
+  role            UserRole
+  bar_council_id  String?
+  created_at      DateTime       @default(now())
+  filed_cases     Case[]         @relation("FilingAdvocate")
+  judge           Judge?
+  documents       Document[]
+  audit_logs      AuditLog[]
+  notifications   Notification[]
+}
+
+model Court {
+  id               String      @id @default(uuid()) @db.Uuid
+  name             String
+  location         String
+  jurisdiction_type String
+  courtrooms       Courtroom[]
+  judges           Judge[]
+  cases            Case[]
+}
+
+model Courtroom {
+  id          String     @id @default(uuid()) @db.Uuid
+  court_id    String     @db.Uuid
+  room_number String
+  capacity    Int
+  court       Court      @relation(fields: [court_id], references: [id], onDelete: Cascade)
+  hearings    Hearing[]
+
+  @@index([court_id])
+}
+
+model Judge {
+  id              String     @id @default(uuid()) @db.Uuid
+  user_id         String     @unique @db.Uuid
+  court_id        String     @db.Uuid
+  designation     String
+  is_active       Boolean    @default(true)
+  user            User       @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  court           Court      @relation(fields: [court_id], references: [id], onDelete: Cascade)
+  assigned_cases  Case[]     @relation("AssignedJudge")
+  hearings        Hearing[]
+
+  @@index([court_id])
+}
+
+model Case {
+  id                 String           @id @default(uuid()) @db.Uuid
+  case_number        String           @unique
+  case_type          String
+  filing_advocate_id String           @db.Uuid
+  status             CaseStatus
+  priority_score     Int              @default(0)
+  is_emergency       Boolean          @default(false)
+  filed_at           DateTime         @default(now())
+  court_id           String           @db.Uuid
+  assigned_judge_id  String?          @db.Uuid
+  filing_advocate    User             @relation("FilingAdvocate", fields: [filing_advocate_id], references: [id])
+  court              Court            @relation(fields: [court_id], references: [id])
+  assigned_judge     Judge?           @relation("AssignedJudge", fields: [assigned_judge_id], references: [id])
+  parties            Party[]
+  hearings           Hearing[]
+  documents          Document[]
+  priority_factors   PriorityFactor[]
+  notifications      Notification[]
+  document_chunks    DocumentChunk[]
+
+  @@index([case_number])
+  @@index([priority_score])
+  @@index([status])
+  @@index([court_id, status])
+}
+
+model Party {
+  id           String    @id @default(uuid()) @db.Uuid
+  case_id      String    @db.Uuid
+  name         String
+  role         PartyRole
+  contact_info String
+  case         Case      @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@index([case_id])
+}
+
+model Hearing {
+  id                String        @id @default(uuid()) @db.Uuid
+  case_id           String        @db.Uuid
+  courtroom_id      String        @db.Uuid
+  judge_id          String        @db.Uuid
+  scheduled_at      DateTime
+  status            HearingStatus
+  order_summary     String?
+  next_hearing_date DateTime?
+  case              Case          @relation(fields: [case_id], references: [id], onDelete: Cascade)
+  courtroom         Courtroom     @relation(fields: [courtroom_id], references: [id])
+  judge             Judge         @relation(fields: [judge_id], references: [id])
+
+  @@index([case_id])
+  @@index([courtroom_id, scheduled_at])
+  @@index([judge_id, scheduled_at])
+}
+
+model Document {
+  id               String          @id @default(uuid()) @db.Uuid
+  case_id          String          @db.Uuid
+  uploaded_by      String          @db.Uuid
+  doc_type         DocumentType
+  storage_url      String
+  version          Int
+  checksum         String
+  virus_scan_status VirusScanStatus
+  uploaded_at      DateTime        @default(now())
+  case             Case            @relation(fields: [case_id], references: [id], onDelete: Cascade)
+  uploader         User            @relation(fields: [uploaded_by], references: [id])
+  chunks           DocumentChunk[]
+
+  @@index([case_id])
+}
+
+model PriorityFactor {
+  id             String            @id @default(uuid()) @db.Uuid
+  case_id        String            @db.Uuid
+  factor_type    PriorityFactorType
+  weight         Int
+  computed_score Int
+  computed_at    DateTime          @default(now())
+  case           Case              @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@index([case_id])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  entity_type  String
+  entity_id    String   @db.Uuid
+  action       String
+  actor_id     String   @db.Uuid
+  before_state Json
+  after_state  Json
+  reason       String
+  prev_hash    String
+  hash         String
+  created_at   DateTime @default(now())
+  actor        User     @relation(fields: [actor_id], references: [id])
+
+  @@index([entity_type, entity_id])
+  @@index([actor_id])
+  @@index([created_at])
+}
+
+model Notification {
+  id         String               @id @default(uuid()) @db.Uuid
+  user_id    String               @db.Uuid
+  case_id    String               @db.Uuid
+  type       String
+  channel    NotificationChannel
+  sent_at    DateTime?
+  read_at    DateTime?
+  user       User                 @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  case       Case                 @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id, read_at])
+  @@index([case_id])
+}
+
+model DocumentChunk {
+  id          String                     @id @default(uuid()) @db.Uuid
+  document_id String                     @db.Uuid
+  case_id     String                     @db.Uuid
+  chunk_text  String
+  page_number Int?
+  embedding   Unsupported("vector(1536)")
+  created_at  DateTime                   @default(now())
+  document    Document                   @relation(fields: [document_id], references: [id], onDelete: Cascade)
+  case        Case                       @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@index([document_id])
+  @@index([case_id])
+  @@map("document_chunk")
+}
