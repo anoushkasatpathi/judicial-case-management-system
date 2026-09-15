@@ -28,11 +28,14 @@
     "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.900.0",
+    "@aws-sdk/s3-request-presigner": "^3.900.0",
     "@prisma/client": "^6.19.0",
     "@nestjs/common": "^12.0.1",
     "@nestjs/core": "^12.0.1",
     "@nestjs/platform-express": "^12.0.1",
     "argon2": "^0.44.0",
+    "bullmq": "^5.58.5",
     "jsonwebtoken": "^9.0.2",
     "redis": "^5.0.1",
     "reflect-metadata": "^0.2.2",
@@ -48,6 +51,7 @@
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^4.1.2",
     "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.0.0",
     "oxlint": "^1.58.0",
     "prisma": "^6.19.0",
     "prettier": "^3.4.2",
