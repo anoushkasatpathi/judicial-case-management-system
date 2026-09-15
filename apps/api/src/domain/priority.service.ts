@@ -113,6 +113,12 @@ export class PriorityService {
     return this.getQueue(courtId);
   }
 
+  async promoteCase(courtId: string, caseId: string, actorId: string, reason: string) {
+    const queue = await this.getQueue(courtId);
+    const orderedIds = [caseId, ...queue.filter((item) => item.id !== caseId).map((item) => item.id)];
+    return this.reorder(courtId, orderedIds, actorId, reason);
+  }
+
   private async syncCourtQueue(courtId: string) {
     const cases = await this.prisma.case.findMany({ where: { court_id: courtId }, orderBy: [{ priority_score: 'desc' }, { filed_at: 'asc' }, { id: 'asc' }] });
     // Redis stores the score; equal scores are resolved by filed_at, then UUID for deterministic ordering.

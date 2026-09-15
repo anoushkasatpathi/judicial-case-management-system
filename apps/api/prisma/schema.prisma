@@ -24,6 +24,14 @@ enum CaseStatus {
   Disposed
 }
 
+enum EmergencyWorkflowStatus {
+  FiledEmergency
+  RegistrarTriage
+  JudgeAcceptance
+  SlotInjection
+  NotificationFanout
+}
+
 enum PartyRole {
   Petitioner
   Respondent
@@ -118,6 +126,7 @@ model Case {
   case_type          String
   filing_advocate_id String           @db.Uuid
   status             CaseStatus
+  emergency_status   EmergencyWorkflowStatus?
   priority_score     Int              @default(0)
   is_emergency       Boolean          @default(false)
   filed_at           DateTime         @default(now())

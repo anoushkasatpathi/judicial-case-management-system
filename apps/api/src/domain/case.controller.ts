@@ -36,12 +36,6 @@ export class CaseController {
     return this.cases.changeStatus(id, this.parseStatus(status), request.user.sub);
   }
 
-  @Post(':id/emergency-flag')
-  @Roles(UserRole.Judge, UserRole.Registrar, UserRole.Admin)
-  flagEmergency(@Param('id') id: string, @Body('reason') reason: string | undefined, @Req() request: AuthenticatedRequest) {
-    return this.cases.flagEmergency(id, request.user.sub, reason);
-  }
-
   @Get(':id/audit-trail')
   @Roles(UserRole.Judge, UserRole.Registrar, UserRole.Admin)
   auditTrail(@Param('id') id: string) {

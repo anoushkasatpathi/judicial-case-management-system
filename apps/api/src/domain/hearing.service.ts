@@ -70,12 +70,59 @@ export class HearingService {
     return { courtroom, from: start.toISOString(), to: end.toISOString(), available: hearings.length === 0, hearings };
   }
 
+  async createEmergencySlot(caseId: string) {
+    const caseItem = await this.prisma.case.findUnique({ where: { id: caseId } });
+    if (!caseItem) throw new NotFoundException('Case not found');
+    const judgeId = caseItem.assigned_judge_id ?? (await this.prisma.judge.findFirst({ where: { court_id: caseItem.court_id, is_active: true }, orderBy: { id: 'asc' } }))?.id;
+    if (!judgeId) throw new NotFoundException('No active judge is available for this court');
+    const courtrooms = await this.prisma.courtroom.findMany({ where: { court_id: caseItem.court_id }, orderBy: { room_number: 'asc' } });
+    if (courtrooms.length === 0) throw new NotFoundException('No courtroom is available for this court');
+
+    const now = new Date();
+    const firstSlot = new Date(now);
+    firstSlot.setMinutes(0, 0, 0);
+    if (firstSlot <= now) firstSlot.setHours(firstSlot.getHours() + 1);
+    for (let slotIndex = 0; slotIndex < 24 * 30; slotIndex += 1) {
+      const scheduledAt = new Date(firstSlot.getTime() + slotIndex * SLOT_DURATION_MS);
+      for (const courtroom of courtrooms) {
+        const conflicts = await this.findConflicts({ case_id: caseId, courtroom_id: courtroom.id, judge_id: judgeId }, scheduledAt);
+        if (conflicts.length === 0) {
+          if (!caseItem.assigned_judge_id) {
+            await this.prisma.case.update({ where: { id: caseId }, data: { assigned_judge_id: judgeId } });
+          }
+          return this.prisma.hearing.create({
+            data: {
+              case_id: caseId,
+              courtroom_id: courtroom.id,
+              judge_id: judgeId,
+              scheduled_at: scheduledAt,
+              status: HearingStatus.Scheduled,
+              order_summary: 'Emergency petition slot injection',
+              next_hearing_date: scheduledAt,
+            },
+          });
+        }
+      }
+    }
+    throw new ConflictException('No non-conflicting courtroom slot is available within the next 30 days');
+  }
+
   private async assertNoConflict(body: Pick<HearingBody, 'case_id' | 'courtroom_id' | 'judge_id'>, scheduledAt: Date, excludeId?: string) {
     const caseExists = await this.prisma.case.findUnique({ where: { id: body.case_id }, select: { id: true } });
     if (!caseExists) throw new NotFoundException('Case not found');
+    const conflicts = await this.findConflicts(body, scheduledAt, excludeId);
+    if (conflicts.length > 0) {
+      const sameRoom = conflicts.some((item) => item.courtroom_id === body.courtroom_id);
+      const sameJudge = conflicts.some((item) => item.judge_id === body.judge_id);
+      const resources = [sameRoom ? 'courtroom' : '', sameJudge ? 'judge' : ''].filter(Boolean).join(' and ');
+      throw new ConflictException(`Hearing conflicts with an existing ${resources} booking near ${scheduledAt.toISOString()}`);
+    }
+  }
+
+  private findConflicts(body: Pick<HearingBody, 'case_id' | 'courtroom_id' | 'judge_id'>, scheduledAt: Date, excludeId?: string) {
     const start = new Date(scheduledAt.getTime() - SLOT_DURATION_MS + 1);
     const end = new Date(scheduledAt.getTime() + SLOT_DURATION_MS - 1);
-    const conflicts = await this.prisma.hearing.findMany({
+    return this.prisma.hearing.findMany({
       where: {
         id: excludeId ? { not: excludeId } : undefined,
         status: { not: HearingStatus.Cancelled },
@@ -83,11 +130,5 @@ export class HearingService {
         OR: [{ courtroom_id: body.courtroom_id }, { judge_id: body.judge_id }],
       },
     });
-    if (conflicts.length > 0) {
-      const sameRoom = conflicts.some((item) => item.courtroom_id === body.courtroom_id);
-      const sameJudge = conflicts.some((item) => item.judge_id === body.judge_id);
-      const resources = [sameRoom ? 'courtroom' : '', sameJudge ? 'judge' : ''].filter(Boolean).join(' and ');
-      throw new ConflictException(`Hearing conflicts with an existing ${resources} booking near ${scheduledAt.toISOString()}`);
-    }
   }
 }
