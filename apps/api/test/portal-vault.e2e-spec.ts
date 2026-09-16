@@ -30,11 +30,12 @@ describe('Document vault and public portal (e2e)', () => {
 
   it('uploads, versions, downloads, and checksum-verifies a document', async () => {
     const content = Buffer.from('JCMS document vault round trip');
+    const filename = `round-trip-${Date.now()}.txt`;
     const first = await request(app.getHttpServer())
       .post(`/api/cases/${caseId}/documents`)
       .set('Authorization', `Bearer ${advocateToken}`)
       .field('doc_type', 'Evidence')
-      .attach('file', content, 'round-trip.txt')
+      .attach('file', content, filename)
       .expect(201);
     expect(first.body.version).toBe(1);
     expect(first.body.checksum).toBe(createHash('sha256').update(content).digest('hex'));
@@ -43,7 +44,7 @@ describe('Document vault and public portal (e2e)', () => {
       .post(`/api/cases/${caseId}/documents`)
       .set('Authorization', `Bearer ${advocateToken}`)
       .field('doc_type', 'Evidence')
-      .attach('file', Buffer.from('version two'), 'round-trip.txt')
+      .attach('file', Buffer.from('version two'), filename)
       .expect(201);
     expect(second.body.version).toBe(2);
 
