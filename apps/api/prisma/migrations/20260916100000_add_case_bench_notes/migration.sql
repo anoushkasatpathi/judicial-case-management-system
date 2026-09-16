@@ -1,0 +1,1 @@
+ALTER TABLE "Case" ADD COLUMN "bench_notes" TEXT;

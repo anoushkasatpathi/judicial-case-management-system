@@ -1,4 +1,4 @@
-import { JwtPayload, verify } from 'jsonwebtoken';
+import jwt, { type JwtPayload } from 'jsonwebtoken';
 import {
   ConnectedSocket,
   MessageBody,
@@ -69,7 +69,7 @@ export class CourtGateway implements OnGatewayConnection {
   private authenticate(socket: Socket): SocketUser {
     const token = this.extractToken(socket.handshake.auth?.token ?? socket.handshake.headers.authorization);
     if (!token) throw new UnauthorizedException('JWT required for Socket.IO connection');
-    const payload = verify(token, process.env.JWT_ACCESS_SECRET ?? 'development-access-secret') as JwtPayload & SocketUser;
+    const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET ?? 'development-access-secret') as JwtPayload & SocketUser;
     if (payload.type !== 'access' || !payload.sub || !payload.role) throw new UnauthorizedException('Invalid Socket.IO JWT');
     return payload;
   }

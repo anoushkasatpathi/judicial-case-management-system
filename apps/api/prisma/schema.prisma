@@ -129,6 +129,7 @@ model Case {
   emergency_status   EmergencyWorkflowStatus?
   priority_score     Int              @default(0)
   is_emergency       Boolean          @default(false)
+  bench_notes        String?
   filed_at           DateTime         @default(now())
   court_id           String           @db.Uuid
   assigned_judge_id  String?          @db.Uuid

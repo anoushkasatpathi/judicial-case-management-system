@@ -23,35 +23,33 @@ export interface CourtSocketState {
 
 export function useCourtSocket(options: CourtSocketOptions): CourtSocketState {
   const [state, setState] = useState<CourtSocketState>({ connected: false })
+  const { courtId, accessToken, onQueueUpdated, onHearingScheduled, onEmergencyAlert } = options
 
   useEffect(() => {
-    if (!options.courtId || !options.accessToken) {
-      setState((current) => ({ ...current, connected: false }))
-      return undefined
-    }
+    if (!courtId || !accessToken) return undefined
 
     const apiUrl = import.meta.env.VITE_API_URL ?? 'http://localhost:3000'
     const socket: Socket = io(`${apiUrl}/ws`, {
-      auth: { token: options.accessToken },
+      auth: { token: accessToken },
       transports: ['websocket'],
     })
 
     const handleConnect = () => {
       setState((current) => ({ ...current, connected: true }))
-      socket.emit('court:join', { courtId: options.courtId })
+      socket.emit('court:join', { courtId })
     }
     const handleDisconnect = () => setState((current) => ({ ...current, connected: false }))
     const handleQueueUpdated = (event: QueueUpdatedEvent) => {
       setState((current) => ({ ...current, queueUpdated: event }))
-      options.onQueueUpdated?.(event)
+      onQueueUpdated?.(event)
     }
     const handleHearingScheduled = (event: HearingScheduledEvent) => {
       setState((current) => ({ ...current, hearingScheduled: event }))
-      options.onHearingScheduled?.(event)
+      onHearingScheduled?.(event)
     }
     const handleEmergencyAlert = (event: EmergencyAlertEvent) => {
       setState((current) => ({ ...current, emergencyAlert: event }))
-      options.onEmergencyAlert?.(event)
+      onEmergencyAlert?.(event)
     }
 
     socket.on('connect', handleConnect)
@@ -68,7 +66,7 @@ export function useCourtSocket(options: CourtSocketOptions): CourtSocketState {
       socket.off('emergency:alert', handleEmergencyAlert)
       socket.disconnect()
     }
-  }, [options.accessToken, options.courtId, options.onEmergencyAlert, options.onHearingScheduled, options.onQueueUpdated])
+  }, [accessToken, courtId, onEmergencyAlert, onHearingScheduled, onQueueUpdated])
 
   return state
 }

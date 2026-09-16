@@ -36,6 +36,12 @@ export class CaseController {
     return this.cases.changeStatus(id, this.parseStatus(status), request.user.sub);
   }
 
+  @Patch(':id/notes')
+  @Roles(UserRole.Judge)
+  updateNotes(@Param('id') id: string, @Body('bench_notes') notes: string) {
+    return this.cases.updateNotes(id, notes);
+  }
+
   @Get(':id/audit-trail')
   @Roles(UserRole.Judge, UserRole.Registrar, UserRole.Admin)
   auditTrail(@Param('id') id: string) {

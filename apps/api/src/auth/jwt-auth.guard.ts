@@ -1,5 +1,5 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
-import { verify, type JwtPayload } from 'jsonwebtoken';
+import jwt, { type JwtPayload } from 'jsonwebtoken';
 import type { AuthTokenPayload, AuthenticatedRequest } from './auth.types.js';
 
 @Injectable()
@@ -14,7 +14,7 @@ export class JwtAuthGuard implements CanActivate {
     }
 
     try {
-      const payload = verify(token, process.env.JWT_ACCESS_SECRET ?? 'development-access-secret') as JwtPayload & AuthTokenPayload;
+      const payload = jwt.verify(token, process.env.JWT_ACCESS_SECRET ?? 'development-access-secret') as JwtPayload & AuthTokenPayload;
       if (payload.type !== 'access' || !payload.sub || !payload.role) {
         throw new Error('Invalid access token');
       }

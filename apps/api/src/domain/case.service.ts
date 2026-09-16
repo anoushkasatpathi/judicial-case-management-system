@@ -106,6 +106,12 @@ export class CaseService {
     return this.priority.recomputeCase(id, actorId, reason);
   }
 
+  async updateNotes(id: string, notes: string) {
+    const current = await this.prisma.case.findUnique({ where: { id } });
+    if (!current) throw new NotFoundException('Case not found');
+    return this.prisma.case.update({ where: { id }, data: { bench_notes: notes } });
+  }
+
   auditTrail(id: string) {
     return this.findOne(id).then(() => this.prisma.auditLog.findMany({ where: { entity_id: id }, orderBy: [{ created_at: 'asc' }, { id: 'asc' }] }));
   }

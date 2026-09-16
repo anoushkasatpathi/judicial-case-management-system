@@ -1,6 +1,6 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { verify, sign, type JwtPayload } from 'jsonwebtoken';
+import jwt, { type JwtPayload } from 'jsonwebtoken';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../prisma.service.js';
 import type { AuthTokenPayload } from './auth.types.js';
@@ -19,12 +19,15 @@ export class AuthService {
   constructor(private readonly prisma: PrismaService) {}
 
   async login(email: string, password: string): Promise<TokenPair> {
-    const user = await this.prisma.user.findUnique({ where: { email } });
+    const user = await this.prisma.user.findUnique({ where: { email }, include: { judge: true } });
     if (!user || !(await argon2.verify(user.password_hash, password))) {
       throw new UnauthorizedException('Invalid email or password');
     }
 
-    return this.issueTokens(user.id, user.email, user.role);
+    const courtId = user.judge?.court_id ?? (user.role === UserRole.Admin || user.role === UserRole.Registrar
+      ? (await this.prisma.court.findFirst({ orderBy: { name: 'asc' }, select: { id: true } }))?.id
+      : undefined);
+    return this.issueTokens(user.id, user.email, user.role, courtId);
   }
 
   refresh(refreshToken: string): TokenPair {
@@ -34,12 +37,12 @@ export class AuthService {
     }
 
     try {
-      const payload = verify(refreshToken, this.refreshSecret) as JwtPayload & AuthTokenPayload;
+      const payload = jwt.verify(refreshToken, this.refreshSecret) as JwtPayload & AuthTokenPayload;
       if (payload.type !== 'refresh' || payload.sub !== storedUserId) {
         throw new Error('Invalid refresh token');
       }
       this.refreshTokens.delete(refreshToken);
-      return this.issueTokens(payload.sub, payload.email, payload.role);
+      return this.issueTokens(payload.sub, payload.email, payload.role, payload.courtId);
     } catch {
       this.refreshTokens.delete(refreshToken);
       throw new UnauthorizedException('Invalid or expired refresh token');
@@ -50,10 +53,10 @@ export class AuthService {
     this.refreshTokens.delete(refreshToken);
   }
 
-  private issueTokens(userId: string, email: string, role: UserRole): TokenPair {
-    const basePayload = { sub: userId, email, role };
-    const accessToken = sign({ ...basePayload, type: 'access' }, this.accessSecret, { expiresIn: '15m' });
-    const refreshToken = sign({ ...basePayload, type: 'refresh' }, this.refreshSecret, { expiresIn: '7d' });
+  private issueTokens(userId: string, email: string, role: UserRole, courtId?: string): TokenPair {
+    const basePayload = { sub: userId, email, role, courtId };
+    const accessToken = jwt.sign({ ...basePayload, type: 'access' }, this.accessSecret, { expiresIn: '15m' });
+    const refreshToken = jwt.sign({ ...basePayload, type: 'refresh' }, this.refreshSecret, { expiresIn: '7d' });
     this.refreshTokens.set(refreshToken, userId);
     return { accessToken, refreshToken };
   }
