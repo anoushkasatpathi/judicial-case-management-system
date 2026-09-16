@@ -4,6 +4,8 @@ import { AuditService } from './audit.service.js';
 import { HearingService } from './hearing.service.js';
 import { PriorityService } from './priority.service.js';
 import { PrismaService } from '../prisma.service.js';
+import { CourtGateway } from '../realtime/court.gateway.js';
+import type { EmergencyAlertEvent } from '@justiq/shared-types';
 
 @Injectable()
 export class EmergencyService {
@@ -12,6 +14,7 @@ export class EmergencyService {
     private readonly audit: AuditService,
     private readonly hearings: HearingService,
     private readonly priority: PriorityService,
+    private readonly gateway: CourtGateway,
   ) {}
 
   async start(caseId: string, actorId: string, reason = 'Emergency petition submitted') {
@@ -22,6 +25,19 @@ export class EmergencyService {
       data: { is_emergency: true, emergency_status: EmergencyWorkflowStatus.FiledEmergency },
     });
     await this.audit.append(caseId, 'EMERGENCY_WORKFLOW_STARTED', { is_emergency: false, emergency_status: null }, { is_emergency: true, emergency_status: updated.emergency_status }, actorId, reason);
+    if (current.assigned_judge_id) {
+      const judge = await this.prisma.judge.findUnique({ where: { id: current.assigned_judge_id }, select: { user_id: true } });
+      if (judge) {
+        const payload: EmergencyAlertEvent = {
+          caseId: current.id,
+          caseNumber: current.case_number,
+          courtId: current.court_id,
+          reason,
+          alertedAt: new Date().toISOString(),
+        };
+        this.gateway.emitEmergencyAlert(payload, judge.user_id);
+      }
+    }
     return this.priority.recomputeCase(caseId, actorId, reason);
   }
 

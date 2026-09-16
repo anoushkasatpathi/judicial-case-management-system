@@ -3,6 +3,8 @@ import { PriorityFactorType, Prisma } from '@prisma/client';
 import { AuditService } from './audit.service.js';
 import { PrismaService } from '../prisma.service.js';
 import { RedisService } from './redis.service.js';
+import { CourtGateway } from '../realtime/court.gateway.js';
+import type { QueueUpdatedEvent } from '@justiq/shared-types';
 
 export interface ScoringCase {
   filedAt: Date;
@@ -40,6 +42,7 @@ export class PriorityService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly redis: RedisService,
+    private readonly gateway: CourtGateway,
   ) {}
 
   async recomputeCase(caseId: string, actorId: string, reason = 'Priority score recomputed') {
@@ -64,7 +67,8 @@ export class PriorityService {
         reason,
       );
     }
-    await this.syncCourtQueue(existing.court_id);
+    const caseIds = await this.syncCourtQueue(existing.court_id);
+    this.gateway.emitQueueUpdated(this.queuePayload(existing.court_id, caseIds));
     return updated;
   }
 
@@ -74,7 +78,10 @@ export class PriorityService {
       select: { id: true },
     });
     for (const item of cases) await this.recomputeCase(item.id, actorId, 'Priority queue recomputed');
-    if (courtId) await this.syncCourtQueue(courtId);
+    if (courtId) {
+      const caseIds = await this.syncCourtQueue(courtId);
+      this.gateway.emitQueueUpdated(this.queuePayload(courtId, caseIds));
+    }
     return { recalculated: cases.length };
   }
 
@@ -108,7 +115,8 @@ export class PriorityService {
         await this.audit.append(caseId, 'PRIORITY_SCORE_CHANGED', { priority_score: item.priority_score }, { priority_score: score }, actorId, reason);
       }
     }
-    await this.syncCourtQueue(courtId);
+    const queueIds = await this.syncCourtQueue(courtId);
+    this.gateway.emitQueueUpdated(this.queuePayload(courtId, queueIds));
     await this.audit.append(courtId, 'QUEUE_REORDERED', { case_ids: cases.map((item) => item.id) }, { case_ids: caseIds }, actorId, reason, 'Court');
     return this.getQueue(courtId);
   }
@@ -119,10 +127,15 @@ export class PriorityService {
     return this.reorder(courtId, orderedIds, actorId, reason);
   }
 
-  private async syncCourtQueue(courtId: string) {
+  private async syncCourtQueue(courtId: string): Promise<string[]> {
     const cases = await this.prisma.case.findMany({ where: { court_id: courtId }, orderBy: [{ priority_score: 'desc' }, { filed_at: 'asc' }, { id: 'asc' }] });
     // Redis stores the score; equal scores are resolved by filed_at, then UUID for deterministic ordering.
     await this.redis.replaceQueue(this.queueKey(courtId), cases.map((item) => ({ value: item.id, score: item.priority_score })));
+    return cases.map((item) => item.id);
+  }
+
+  private queuePayload(courtId: string, caseIds: string[]): QueueUpdatedEvent {
+    return { courtId, caseIds, updatedAt: new Date().toISOString() };
   }
 
   private buildFactors(item: Prisma.CaseGetPayload<{ include: { priority_factors: true } }>) {

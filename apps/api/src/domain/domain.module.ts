@@ -16,9 +16,10 @@ import { ObjectStorageService } from './object-storage.service.js';
 import { PublicController } from './public.controller.js';
 import { PublicService } from './public.service.js';
 import { VirusScanService } from './virus-scan.service.js';
+import { CourtGateway } from '../realtime/court.gateway.js';
 
 @Module({
   controllers: [CaseController, PriorityController, HearingController, EmergencyController, DocumentController, PublicController],
-  providers: [PrismaService, AuditService, CaseService, HearingService, PriorityService, RedisService, EmergencyService, ObjectStorageService, VirusScanService, DocumentService, PublicService],
+  providers: [PrismaService, AuditService, CaseService, HearingService, PriorityService, RedisService, EmergencyService, ObjectStorageService, VirusScanService, DocumentService, PublicService, CourtGateway],
 })
 export class DomainModule {}

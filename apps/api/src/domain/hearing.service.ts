@@ -1,6 +1,8 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { HearingStatus } from '@prisma/client';
 import { PrismaService } from '../prisma.service.js';
+import { CourtGateway } from '../realtime/court.gateway.js';
+import type { HearingScheduledEvent } from '@justiq/shared-types';
 
 const SLOT_DURATION_MS = 60 * 60 * 1000;
 
@@ -16,12 +18,12 @@ export interface HearingBody {
 
 @Injectable()
 export class HearingService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService, private readonly gateway: CourtGateway) {}
 
   async create(body: HearingBody) {
     const scheduledAt = new Date(body.scheduled_at);
     await this.assertNoConflict(body, scheduledAt);
-    return this.prisma.hearing.create({
+    const hearing = await this.prisma.hearing.create({
       data: {
         case_id: body.case_id,
         courtroom_id: body.courtroom_id,
@@ -32,6 +34,8 @@ export class HearingService {
         next_hearing_date: body.next_hearing_date ? new Date(body.next_hearing_date) : undefined,
       },
     });
+    await this.emitScheduled(hearing.id);
+    return hearing;
   }
 
   async update(id: string, body: Partial<HearingBody>) {
@@ -44,7 +48,7 @@ export class HearingService {
       scheduled_at: body.scheduled_at ?? existing.scheduled_at.toISOString(),
     };
     await this.assertNoConflict(candidate, new Date(candidate.scheduled_at), id);
-    return this.prisma.hearing.update({
+    const hearing = await this.prisma.hearing.update({
       where: { id },
       data: {
         case_id: body.case_id,
@@ -56,6 +60,8 @@ export class HearingService {
         next_hearing_date: body.next_hearing_date ? new Date(body.next_hearing_date) : undefined,
       },
     });
+    await this.emitScheduled(hearing.id);
+    return hearing;
   }
 
   async availability(id: string, from?: string, to?: string) {
@@ -90,7 +96,7 @@ export class HearingService {
           if (!caseItem.assigned_judge_id) {
             await this.prisma.case.update({ where: { id: caseId }, data: { assigned_judge_id: judgeId } });
           }
-          return this.prisma.hearing.create({
+          const hearing = await this.prisma.hearing.create({
             data: {
               case_id: caseId,
               courtroom_id: courtroom.id,
@@ -101,6 +107,8 @@ export class HearingService {
               next_hearing_date: scheduledAt,
             },
           });
+          await this.emitScheduled(hearing.id);
+          return hearing;
         }
       }
     }
@@ -130,5 +138,20 @@ export class HearingService {
         OR: [{ courtroom_id: body.courtroom_id }, { judge_id: body.judge_id }],
       },
     });
+  }
+
+  private async emitScheduled(hearingId: string): Promise<void> {
+    const hearing = await this.prisma.hearing.findUniqueOrThrow({
+      where: { id: hearingId },
+      include: { case: { select: { court_id: true } } },
+    });
+    const payload: HearingScheduledEvent = {
+      hearingId: hearing.id,
+      caseId: hearing.case_id,
+      courtroomId: hearing.courtroom_id,
+      judgeId: hearing.judge_id,
+      scheduledAt: hearing.scheduled_at.toISOString(),
+    };
+    this.gateway.emitHearingScheduled(payload, hearing.case.court_id);
   }
 }
