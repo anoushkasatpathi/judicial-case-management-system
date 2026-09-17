@@ -68,11 +68,20 @@ export const api = {
   triage: (id: string) => request(`/api/cases/${id}/emergency/triage`, { method: 'POST' }),
   acceptEmergency: (id: string) => request(`/api/cases/${id}/emergency/accept`, { method: 'POST' }),
   emergencyCases: () => request<{ items: CaseRecord[] }>('/api/cases?status=Filed&limit=100'),
+  extractPetition: (documentId: string) => request<PetitionExtraction>(`/api/ai/petitions/${documentId}/extract`, { method: 'POST' }),
+  prioritySuggestion: (caseId: string) => request<PrioritySuggestion>(`/api/ai/cases/${caseId}/priority-suggestion`, { method: 'POST' }),
+  summarizeCase: (caseId: string) => request<CaseSummary>(`/api/ai/cases/${caseId}/summarize`, { method: 'POST' }),
+  draftOrder: (hearingId: string, transcript: string) => request<DraftOrder>(`/api/ai/hearings/${hearingId}/draft-order`, { method: 'POST', body: { transcript } }),
+  approveDraft: (draftId: string, order_summary: string) => request(`/api/ai/draft-orders/${draftId}/approve`, { method: 'PATCH', body: { order_summary } }),
   causeList: (court: string, date: string) => request<CauseEntry[]>(`/api/public/cause-list?court=${encodeURIComponent(court)}&date=${encodeURIComponent(date)}`),
   caseStatus: (caseNumber: string) => request<CaseRecord>(`/api/public/case-status?caseNumber=${encodeURIComponent(caseNumber)}`),
 }
 
-export interface Party { name: string; role: string; contact_info?: string }
+export interface Party { name: string; role: 'Petitioner' | 'Respondent'; contact_info?: string }
 export interface HearingRecord { id: string; scheduled_at: string; status: string; courtroom_id?: string; courtroom?: { room_number: string }; next_hearing_date?: string }
 export interface CaseRecord { id: string; case_number: string; case_type: string; status: string; emergency_status?: string; priority_score: number; is_emergency: boolean; filed_at: string; bench_notes?: string; parties?: Party[]; hearings?: HearingRecord[]; court?: { name: string; location?: string } }
 export interface CauseEntry { hearingId: string; scheduledAt: string; hearingStatus: string; courtroom: string; judgeDesignation: string; case: { case_number: string; case_type: string; status: string; parties: Array<{ name: string; role: string }> } }
+export interface PetitionExtraction { document_id: string; case_title: string; party_names: Party[]; case_type: string; key_dates: Array<{ label: string; date: string }>; relief_sought: string; review_status: string }
+export interface PrioritySuggestion { id: string; urgency_class: 'high' | 'medium' | 'low'; rationale: string; flagged_factors: string[]; suggested_weight_delta: number; deterministic_score_unchanged: number }
+export interface CaseSummary { case_id: string; summary: Record<string, Array<{ claim: string; citations: string[] }>> }
+export interface DraftOrder { id: string; hearing_id: string; label: string; draft: { case_number: string; appearances: string[]; submissions: string[]; directions: string[]; next_date: string | null } }

@@ -142,6 +142,7 @@ model Case {
   priority_factors   PriorityFactor[]
   notifications      Notification[]
   document_chunks    DocumentChunk[]
+  ai_priority_suggestions AiPrioritySuggestion[]
 
   @@index([case_number])
   @@index([priority_score])
@@ -172,6 +173,7 @@ model Hearing {
   case              Case          @relation(fields: [case_id], references: [id], onDelete: Cascade)
   courtroom         Courtroom     @relation(fields: [courtroom_id], references: [id])
   judge             Judge         @relation(fields: [judge_id], references: [id])
+  ai_draft_orders   AiDraftOrder[]
 
   @@index([case_id])
   @@index([courtroom_id, scheduled_at])
@@ -257,4 +259,33 @@ model DocumentChunk {
   @@index([document_id])
   @@index([case_id])
   @@map("document_chunk")
+}
+
+model AiPrioritySuggestion {
+  id                    String   @id @default(uuid()) @db.Uuid
+  case_id               String   @db.Uuid
+  urgency_class         String
+  rationale             String
+  flagged_factors       Json
+  suggested_weight_delta Int
+  prompt_version        String
+  model                 String
+  human_final_score     Int?
+  created_at            DateTime @default(now())
+  case                  Case     @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@index([case_id, created_at])
+}
+
+model AiDraftOrder {
+  id             String   @id @default(uuid()) @db.Uuid
+  hearing_id     String   @db.Uuid
+  draft          Json
+  label          String
+  prompt_version String
+  created_at     DateTime @default(now())
+  approved_at    DateTime?
+  hearing        Hearing  @relation(fields: [hearing_id], references: [id], onDelete: Cascade)
+
+  @@index([hearing_id, created_at])
 }

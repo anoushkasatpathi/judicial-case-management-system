@@ -3,7 +3,7 @@ import { QueryClientProvider, useMutation, useQuery } from '@tanstack/react-quer
 import { BrowserRouter, Link, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import { AlertTriangle, ArrowRight, CalendarDays, CheckCircle2, FilePlus2, Gavel, LayoutDashboard, LogOut, Menu, Search, ShieldCheck, SlidersHorizontal, X } from 'lucide-react'
 import { useCourtSocket } from './hooks/useCourtSocket'
-import { api, getAccessToken, type CaseRecord } from './lib/api'
+import { api, getAccessToken, type CaseRecord, type PetitionExtraction } from './lib/api'
 import { queryClient } from './lib/query'
 import { useAuth } from './state/auth'
 import { EmergencyTriage, QueueReorder } from './components/PortalControls'
@@ -51,7 +51,7 @@ function JudgePortal() {
   const user = useAuth((state) => state.user)
   const cases = useQuery({ queryKey: ['queue', user?.courtId], queryFn: () => api.queue(user?.courtId ?? ''), enabled: Boolean(user?.courtId) })
   const socket = useCourtSocket({ courtId: user?.courtId, accessToken: getAccessToken() })
-  return <><PortalHeader eyebrow="Bench view" title="Judge dashboard" description="Your live docket, hearing pressure, and notes in one place." live={socket.connected} /><section className="portal-grid"><Panel title="Live docket" icon={<LayoutDashboard size={18} />} state={cases}>{cases.data?.length ? <div className="case-list">{cases.data.map((item) => <CaseRow key={item.id} item={item} action={<BenchNotes item={item} />} />)}</div> : <Empty text="No cases are currently in this court queue." />}</Panel><Panel title="Courtroom management" icon={<CalendarDays size={18} />} state={cases}><div className="metric-row"><Metric value={cases.data?.length ?? 0} label="queued cases" /><Metric value={cases.data?.filter((item) => item.is_emergency).length ?? 0} label="emergency matters" /></div><p className="muted">Review hearing activity from each case record.</p></Panel></section></>
+  return <><PortalHeader eyebrow="Bench view" title="Judge dashboard" description="Your live docket, hearing pressure, and notes in one place." live={socket.connected} /><section className="portal-grid"><Panel title="Live docket" icon={<LayoutDashboard size={18} />} state={cases}>{cases.data?.length ? <div className="case-list">{cases.data.map((item) => <CaseRow key={item.id} item={item} action={<><BenchNotes item={item} /><AiCaseTools item={item} /></>} />)}</div> : <Empty text="No cases are currently in this court queue." />}</Panel><Panel title="Courtroom management" icon={<CalendarDays size={18} />} state={cases}><div className="metric-row"><Metric value={cases.data?.length ?? 0} label="queued cases" /><Metric value={cases.data?.filter((item) => item.is_emergency).length ?? 0} label="emergency matters" /></div><p className="muted">Review hearing activity from each case record.</p><DraftOrderTool /></Panel></section></>
 }
 
 function RegistrarPortal() {
@@ -61,6 +61,8 @@ function RegistrarPortal() {
   const accept = useMutation({ mutationFn: (id: string) => api.acceptEmergency(id), onSuccess: () => void cases.refetch() })
   const queue = useQuery({ queryKey: ['queue', user?.courtId], queryFn: () => api.queue(user?.courtId ?? ''), enabled: Boolean(user?.courtId) })
   const reorder = useMutation({ mutationFn: (ids: string[]) => api.reorder(user?.courtId ?? '', ids, 'Registrar manual reorder'), onSuccess: () => void queue.refetch() })
+  const [documentId, setDocumentId] = useState('')
+  const extract = useMutation({ mutationFn: () => api.extractPetition(documentId) })
   return <>
     <PortalHeader eyebrow="Registrar desk" title="Control the docket" description="Verify filings, triage emergency matters, and keep the queue moving." />
     <section className="portal-grid">
@@ -70,6 +72,7 @@ function RegistrarPortal() {
       <Panel title="Manual queue order" icon={<SlidersHorizontal size={18} />} state={queue}>
         {queue.data?.length ? <QueueReorder items={queue.data} onReorder={(items) => reorder.mutate(items.map((item) => item.id))} /> : <Empty text="The court queue is empty." />}
       </Panel>
+      <Panel title="AI filing verification" icon={<ShieldCheck size={18} />} state={{ isLoading: extract.isPending, isError: extract.isError, error: extract.error }}><form className="compact-form" onSubmit={(event) => { event.preventDefault(); extract.mutate() }}><label>Petition document ID<input required value={documentId} onChange={(event) => setDocumentId(event.target.value)} /></label><button className="primary-button" type="submit">Extract for review <ArrowRight size={16} /></button></form>{extract.data && <ExtractionReview result={extract.data} />}</Panel>
     </section>
   </>
 }
@@ -98,6 +101,9 @@ function Loading() { return <div className="loading-state"><span className="spin
 function Empty({ text }: { text: string }) { return <div className="empty-state"><span>—</span>{text}</div> }
 function Metric({ value, label }: { value: number; label: string }) { return <div className="metric"><strong>{value}</strong><span>{label}</span></div> }
 function CaseRow({ item, action }: { item: CaseRecord; action?: React.ReactNode }) { return <div className="case-row"><div><strong>{item.case_number}</strong><span>{item.case_type}</span></div><div className="case-meta"><b>{item.priority_score}</b><Workflow status={item.status} /></div>{action}</div> }
+function AiCaseTools({ item }: { item: CaseRecord }) { const suggestion = useMutation({ mutationFn: () => api.prioritySuggestion(item.id) }); const summary = useMutation({ mutationFn: () => api.summarizeCase(item.id) }); const [open, setOpen] = useState(false); return <div className="ai-tools"><button className="secondary-button" onClick={() => suggestion.mutate()}>AI priority hint</button><button className="secondary-button" onClick={() => { setOpen(true); summary.mutate() }}>Summarize file</button>{suggestion.data && <div className="ai-result"><strong>AI-assisted, human-reviewed</strong><span>{suggestion.data.urgency_class} urgency · {suggestion.data.suggested_weight_delta > 0 ? '+' : ''}{suggestion.data.suggested_weight_delta} bounded delta</span><small>{suggestion.data.rationale}</small></div>}{open && summary.data && <div className="ai-result"><strong>AI summary, review before reliance</strong>{Object.entries(summary.data.summary).map(([section, claims]) => <div key={section}><b>{section.replaceAll('_', ' ')}</b>{claims.map((claim) => <small key={claim.claim}>{claim.claim} [{claim.citations.join(', ')}]</small>)}</div>)}</div>}</div> }
+function ExtractionReview({ result }: { result: PetitionExtraction }) { return <div className="ai-result"><strong>AI-assisted prefill · confirm before filing</strong><label>Case title<input defaultValue={result.case_title} /></label><label>Case type<input defaultValue={result.case_type} /></label><label>Relief sought<textarea defaultValue={result.relief_sought} /></label><small>{result.party_names.map((party) => `${party.role}: ${party.name}`).join(' · ') || 'No parties detected'}</small></div> }
+function DraftOrderTool() { const [hearingId, setHearingId] = useState(''); const [transcript, setTranscript] = useState(''); const draft = useMutation({ mutationFn: () => api.draftOrder(hearingId, transcript) }); return <div className="ai-result"><strong>AI stenographer · human review required</strong><form className="compact-form" onSubmit={(event) => { event.preventDefault(); draft.mutate() }}><input required placeholder="Hearing ID" value={hearingId} onChange={(event) => setHearingId(event.target.value)} /><textarea required placeholder="Diarized transcript or uploaded audio transcript" value={transcript} onChange={(event) => setTranscript(event.target.value)} /><button className="primary-button" type="submit">Draft order <ArrowRight size={16} /></button></form>{draft.data && <><strong>{draft.data.label}</strong><small>Case {draft.data.draft.case_number}</small><small>Directions: {draft.data.draft.directions.join(' · ') || 'None detected'}</small></>}</div> }
 function Workflow({ status }: { status?: string }) { return <span className={`workflow workflow-${status?.toLowerCase().replaceAll('_', '-')}`}><span />{status?.replaceAll('_', ' ') ?? 'Unknown'}</span> }
 function BenchNotes({ item }: { item: CaseRecord }) { const [notes, setNotes] = useState(item.bench_notes ?? ''); const mutation = useMutation({ mutationFn: () => api.notes(item.id, notes) }); return <form className="notes-form" onSubmit={(event) => { event.preventDefault(); mutation.mutate() }}><textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Bench note" /><button className="icon-button" aria-label="Save bench note" type="submit"><CheckCircle2 size={15} /></button></form> }
 export default App

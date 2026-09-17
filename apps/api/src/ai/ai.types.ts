@@ -1,0 +1,7 @@
+export const AI_DRAFT_LABEL = 'AI-generated draft — pending judicial review';
+export interface PetitionExtraction { case_title: string; party_names: Array<{ name: string; role: 'Petitioner' | 'Respondent' }>; case_type: string; key_dates: Array<{ label: string; date: string }>; relief_sought: string }
+export interface AIPrioritySuggestion { urgency_class: 'high' | 'medium' | 'low'; rationale: string; flagged_factors: string[]; suggested_weight_delta: number }
+export interface StructuredSummary { parties: Array<{ claim: string; citations: string[] }>; timeline: Array<{ claim: string; citations: string[] }>; key_evidence: Array<{ claim: string; citations: string[] }>; prior_orders: Array<{ claim: string; citations: string[] }>; open_issues: Array<{ claim: string; citations: string[] }> }
+export interface DraftOrder { case_number: string; appearances: string[]; submissions: string[]; directions: string[]; next_date: string | null }
+export interface AiProvider { extractPetition(text: string): Promise<PetitionExtraction>; classifyPriority(text: string, model: 'cheap' | 'large'): Promise<AIPrioritySuggestion>; summarize(chunks: Array<{ text: string; citation: string }>): Promise<StructuredSummary>; draftOrder(transcript: string): Promise<DraftOrder> }
+export interface SpeechToTextProvider { transcribe(audio: Buffer): Promise<string> }

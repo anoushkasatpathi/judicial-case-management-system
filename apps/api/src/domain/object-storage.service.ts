@@ -37,6 +37,12 @@ export class ObjectStorageService {
     }), { expiresIn: 900 });
   }
 
+  async getBuffer(key: string): Promise<Buffer> {
+    await this.ensureBucket();
+    const result = await this.client.send(new GetObjectCommand({ Bucket: this.bucket, Key: key }));
+    return Buffer.from(await (result.Body?.transformToByteArray() ?? Promise.resolve(new Uint8Array())));
+  }
+
   storageKey(caseId: string, filename: string, version: number): string {
     return `${caseId}/${version}-${randomUUID()}-${filename.replace(/[^a-zA-Z0-9._-]/g, '_')}`;
   }
