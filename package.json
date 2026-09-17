@@ -4,6 +4,10 @@
   "version": "0.1.0",
   "description": "Judicial Case Management System monorepo",
   "workspaces": ["apps/*", "packages/*"],
+  "overrides": {
+    "multer": "2.4.0",
+    "@nestjs/platform-express": { "multer": "2.4.0" }
+  },
   "scripts": {
     "dev:api": "npm run start:dev --workspace apps/api",
     "dev:web": "npm run dev --workspace apps/web",

@@ -1,36 +1,31 @@
 import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
+import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service.js';
 import { JwtAuthGuard } from './jwt-auth.guard.js';
 import { Roles } from './roles.decorator.js';
 import { RolesGuard } from './roles.guard.js';
 import type { AuthenticatedRequest } from './auth.types.js';
-
-interface LoginBody {
-  email: string;
-  password: string;
-}
-
-interface RefreshBody {
-  refreshToken: string;
-}
+import { LoginDto, RefreshDto } from './auth.dto.js';
 
 @Controller('api/auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('login')
-  login(@Body() body: LoginBody) {
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  login(@Body() body: LoginDto) {
     return this.authService.login(body.email, body.password);
   }
 
   @Post('refresh')
-  refresh(@Body() body: RefreshBody) {
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  refresh(@Body() body: RefreshDto) {
     return this.authService.refresh(body.refreshToken);
   }
 
   @Post('logout')
-  logout(@Body() body: RefreshBody): { success: true } {
+  logout(@Body() body: RefreshDto): { success: true } {
     this.authService.logout(body.refreshToken);
     return { success: true };
   }

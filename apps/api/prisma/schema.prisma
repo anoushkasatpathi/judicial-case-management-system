@@ -143,6 +143,7 @@ model Case {
   notifications      Notification[]
   document_chunks    DocumentChunk[]
   ai_priority_suggestions AiPrioritySuggestion[]
+  ai_summaries       AiCaseSummary[]
 
   @@index([case_number])
   @@index([priority_score])
@@ -288,4 +289,15 @@ model AiDraftOrder {
   hearing        Hearing  @relation(fields: [hearing_id], references: [id], onDelete: Cascade)
 
   @@index([hearing_id, created_at])
+}
+
+model AiCaseSummary {
+  id             String   @id @default(uuid()) @db.Uuid
+  case_id        String   @db.Uuid
+  summary        Json
+  prompt_version String
+  created_at     DateTime @default(now())
+  case           Case     @relation(fields: [case_id], references: [id], onDelete: Cascade)
+
+  @@index([case_id, created_at])
 }

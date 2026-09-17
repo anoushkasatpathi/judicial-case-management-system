@@ -1,17 +1,21 @@
 import { Controller, Get, Query } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { PublicService } from './public.service.js';
+import { CaseStatusQueryDto, CauseListQueryDto } from './public.dto.js';
 
 @Controller('api/public')
 export class PublicController {
   constructor(private readonly publicService: PublicService) {}
 
   @Get('cause-list')
-  causeList(@Query('court') court?: string, @Query('date') date?: string) {
-    return this.publicService.causeList(court, date);
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  causeList(@Query() query: CauseListQueryDto) {
+    return this.publicService.causeList(query.court, query.date);
   }
 
   @Get('case-status')
-  caseStatus(@Query('caseNumber') caseNumber?: string) {
-    return this.publicService.caseStatus(caseNumber ?? '');
+  @Throttle({ default: { limit: 60, ttl: 60_000 } })
+  caseStatus(@Query() query: CaseStatusQueryDto) {
+    return this.publicService.caseStatus(query.caseNumber);
   }
 }

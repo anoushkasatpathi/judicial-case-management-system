@@ -1,4 +1,6 @@
 import { NestFactory } from '@nestjs/core';
+import { ValidationPipe } from '@nestjs/common';
+import helmet from 'helmet';
 import * as Sentry from '@sentry/node';
 import type { NextFunction, Request, Response } from 'express';
 import { AppModule } from './app.module.js';
@@ -10,7 +12,10 @@ if (process.env.SENTRY_DSN) {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  app.enableCors({ origin: true, credentials: true });
+  const allowedOrigins = (process.env.CORS_ORIGINS ?? 'http://localhost:5173').split(',').map((origin) => origin.trim()).filter(Boolean);
+  app.use(helmet());
+  app.enableCors({ origin: allowedOrigins, credentials: true });
+  app.useGlobalPipes(new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true }));
   app.use((request: Request, response: Response, next: NextFunction) => {
     const start = process.hrtime.bigint();
     response.on('finish', () => {
